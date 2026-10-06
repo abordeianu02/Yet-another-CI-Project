@@ -149,6 +149,10 @@ public class VersionCheck {
         cands.add(new Version(cur.major(), cur.minor() + 1, 0, List.of()));
         labels.add("major");
         cands.add(new Version(cur.major() + 1, 0, 0, List.of()));
+        if (cur.pre().isEmpty()) {
+            labels.add("alpha (test)");
+            cands.add(new Version(cur.major(), cur.minor(), cur.patch() + 1, List.of("alpha", "1")));
+        }
 
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
         String branch = run(null, false, "rev-parse", "--abbrev-ref", "HEAD").out().trim();
@@ -156,6 +160,8 @@ public class VersionCheck {
         for (int i = 0; i < cands.size(); i++) {
             System.out.printf("  %d) %-16s -> %s%n", i + 1, labels.get(i), cands.get(i));
         }
+        System.out.println("Tip: for a test build, add a prerelease suffix, e.g. "
+                + new Version(cur.major(), cur.minor(), cur.patch() + 1, List.of("alpha", "1")));
 
         Version chosen = null;
         while (chosen == null) {
