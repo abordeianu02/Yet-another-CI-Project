@@ -27,7 +27,7 @@ powershell -ExecutionPolicy Bypass -File $env:TEMP\install-versionguard.ps1
 
 The installer copies the hook into `.githooks/`, sets up Git, and stages the files. Review them with `git status`, then commit and push.
 
-Options (append to the second command):
+Options (append to the second command, aka `powershell -ExecutionPolicy Bypass -File $env:TEMP\install-versionguard.ps1`):
 
 | Option | Effect |
 |---|---|
@@ -36,7 +36,8 @@ Options (append to the second command):
 | `-Force` | Overwrite an existing, different `pre-push` hook or `core.hooksPath` |
 | `-Uninstall` | Remove the hook and unset `core.hooksPath` |
 
-**Teammates:** after cloning, run `.githooks\setup-hooks.cmd` once. Git does not copy hook settings between clones.
+## Important!
+After installation, run `.githooks\setup-hooks.cmd` once. Git does not copy hook settings between clones.
 
 ## Everyday use
 
@@ -44,11 +45,12 @@ Options (append to the second command):
 2. Ready to release? On `master`, run `.githooks\bump-version.cmd`. Pick patch, minor or major, or type your own version.
 3. Run `git push`. The version commit and its tag go up together.
 
-**Test builds:** type a version with a counter suffix, like `1.2.4-alpha.1`, then `1.2.4-alpha.2`. A repeated suffix is blocked, and an alpha pushed to a published branch is a real release that cannot be replaced.
+**Test builds:** type a version with a counter suffix, like `1.2.4-alpha.1`, then `1.2.4-alpha.2`. A repeated suffix is blocked, and an alpha pushed to a published branch is a real release that cannot be replaced (if the Nexus repository is configured so).
 
 **Version rules:** the version must be strictly greater than the one on the remote branch. The format is `MAJOR.MINOR.PATCH`, optionally followed by `-suffix`. Order: `1.2.3-alpha.1` < `1.2.3-alpha.2` < `1.2.3` < `1.2.4-alpha.1`.
 
-**Which branches:** edit `.githooks/release-branches`, one pattern per line (`master`, `release/*`). The list is per project.
+### Note: selected branches
+**Which branches are affected:** edit `.githooks/release-branches`, one pattern per line (`master`, `release/*`). The list is per project.
 
 ## Danger zone
 
