@@ -12,7 +12,8 @@
   Local folder (containing .githooks\) or .zip to install from instead of GitHub.
 
 .PARAMETER Force
-  Overwrite a foreign .githooks\pre-push and replace a different core.hooksPath.
+  Install even if existing hooks would stop running. Also overwrites a foreign
+  .githooks\pre-push and replaces a different repository-level core.hooksPath.
 
 .PARAMETER Uninstall
   Remove the hook files and unset core.hooksPath.
@@ -45,7 +46,7 @@ $hooks = Join-Path $root '.githooks'
 # --- uninstall ---------------------------------------------------------------
 if ($Uninstall) {
     foreach ($f in $Files) { Remove-Item (Join-Path $hooks $f) -ErrorAction SilentlyContinue }
-    if ((& git config core.hooksPath) -eq '.githooks') { & git config --unset core.hooksPath }
+    if ((& git config --local core.hooksPath) -eq '.githooks') { & git config --local --unset core.hooksPath }
     Write-Host 'Removed hook files and unset core.hooksPath.'
     Write-Host '(.githooks\release-branches and the .gitattributes rules were left in place.)'
     return
@@ -55,13 +56,40 @@ if ($Uninstall) {
 if (-not (Test-Path (Join-Path $root 'pom.xml'))) {
     throw "No pom.xml at the repository root ($root). The hook only supports a root pom.xml."
 }
-$currentPath = (& git config core.hooksPath)
-if ($currentPath -and $currentPath -ne '.githooks' -and -not $Force) {
-    throw "core.hooksPath is already '$currentPath'. Re-run with -Force to replace it."
+$localPath     = (& git config --local core.hooksPath)
+$effectivePath = (& git config core.hooksPath)
+if ($localPath -and $localPath -ne '.githooks' -and -not $Force) {
+    throw "This repository already sets core.hooksPath to '$localPath'. Re-run with -Force to replace it."
 }
 $existing = Join-Path $hooks 'pre-push'
 if ((Test-Path $existing) -and -not $Force -and -not (Select-String -Path $existing -Pattern 'VersionCheck.java' -Quiet)) {
     throw '.githooks\pre-push exists and is not this hook. Re-run with -Force to overwrite it.'
+}
+
+# --- existing hooks that would stop running ----------------------------------
+# Git uses ONE hooks folder. Once core.hooksPath points to .githooks, every hook
+# in the folder used today (.git\hooks, or a global core.hooksPath) is ignored.
+$oldDir = $null
+if ($localPath) {
+    if ($localPath -ne '.githooks') { $oldDir = $localPath }
+}
+elseif (-not $effectivePath) { $oldDir = (& git rev-parse --git-path hooks) }
+elseif ($effectivePath -ne '.githooks') { $oldDir = $effectivePath }
+$lost = @()
+$oldFull = $null
+if ($oldDir) {
+    $oldFull = $oldDir
+    if (-not [IO.Path]::IsPathRooted($oldDir)) { $oldFull = Join-Path $root $oldDir }
+    if (Test-Path $oldFull -PathType Container) {
+        $lost = @(Get-ChildItem $oldFull -File | Where-Object { $_.Extension -ne '.sample' } | ForEach-Object { $_.Name })
+    }
+}
+if ($lost.Count -gt 0 -and -not $Force) {
+    throw ("Installing would switch off $($lost.Count) existing hook(s) in this repository:`n" +
+           "  folder: $oldFull`n" +
+           "  hooks:  $($lost -join ', ')`n" +
+           "Git can use only one hooks folder, so these would stop running here.`n" +
+           "Nothing was changed. Re-run with -Force to install anyway.")
 }
 
 # --- fetch the package -------------------------------------------------------
@@ -130,8 +158,8 @@ if ($missing.Count -gt 0) {
 # --- git setup ---------------------------------------------------------------
 & git add -- .githooks .gitattributes
 & git update-index --chmod=+x .githooks/pre-push
-& git config core.hooksPath .githooks
-& git config push.followTags true
+& git config --local core.hooksPath .githooks
+& git config --local push.followTags true
 
 # --- done --------------------------------------------------------------------
 Write-Host ''
@@ -139,6 +167,12 @@ Write-Host "Installed pom-version hook ($label) into $root"
 Write-Host '  1. Review "git status", then commit the staged files.'
 Write-Host '  2. Protected branches: see .githooks\release-branches'
 Write-Host '  3. Teammates run .githooks\setup-hooks.cmd once after cloning.'
+if ($lost.Count -gt 0) {
+    Write-Warning "These hooks no longer run in this repository: $($lost -join ', ') (files untouched in $oldFull)."
+}
+elseif ($oldDir -and $effectivePath) {
+    Write-Warning "A global/system core.hooksPath ('$effectivePath') is set. In this repository it is now overridden."
+}
 if (-not (Get-Command java -ErrorAction SilentlyContinue) -and -not $env:JAVA_HOME) {
     Write-Warning 'No java on PATH and JAVA_HOME is not set. The hook needs JDK 17+ to run.'
 }

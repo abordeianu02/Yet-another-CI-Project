@@ -15,6 +15,25 @@ A helper script, `bump-version`, asks you for the new version, commits it and ta
 - Windows with Git for Windows
 - JDK 17 or newer, on `PATH` or in `JAVA_HOME`
 - A Maven project with `pom.xml` at the repository root
+## Before you install: existing Git hooks
+
+> **Git can use only one hooks folder per repository.** Version Guard uses `.githooks/`. Once it is installed, hooks you already have for this repository stop running, and that means **all** of them (`pre-commit`, `commit-msg`, ...), not just `pre-push`. This applies to hooks in `.git/hooks/` and to hooks from a global `core.hooksPath`.
+
+The installer checks first. If it finds existing hooks, it lists them, changes nothing, and stops. Your options:
+
+- **No existing hooks:** the install just works.
+- **Other hooks (for example `pre-commit`):** install with `-Force`, then copy those files from the old folder into `.githooks/` and commit them together with the install. Hooks that look for helper files next to themselves may need adjusting.
+- **You already have a `pre-push` hook:** Version Guard cannot share it. Do not merge them by appending text. Combine them yourself or do not install.
+- **Install anyway:** re-run with `-Force`. Your old hook files are not touched, they just stop running in this repository.
+
+Check by hand first with:
+
+```powershell
+dir .git\hooks
+git config --show-origin --get-all core.hooksPath
+```
+
+(`.sample` files in `.git/hooks` do not count, and `core.hooksPath` should print nothing.)
 
 ## Install
 
@@ -66,6 +85,7 @@ What you give up: nothing else checks versions on the client. If your artifact r
 
 ## Troubleshooting
 
+- **"Installing would switch off N existing hook(s)":** see *Before you install* above. Nothing was changed.
 - **"java not found":** set `JAVA_HOME` (user environment variable) and restart your IDE.
 - **"remote tip is not in your local repository":** run `git fetch`, then push again.
 - **"declares no `<version>` of its own":** the root pom inherits its version or uses `${revision}`. Not supported.
