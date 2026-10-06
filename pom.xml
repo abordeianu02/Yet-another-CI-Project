@@ -6,7 +6,7 @@
 
     <groupId>org.example</groupId>
     <artifactId>Yet-another-CI-Project</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
