@@ -86,6 +86,7 @@ public class VersionCheck {
             System.err.println("pre-push: warning: version " + local + " has no local tag '" + local + "'. "
                     + "(bump-version creates it; push it with: git push " + remote + " " + local + ")");
         }
+        System.err.println("pre-push: version " + local + " OK (greater than " + base + " on " + baseLabel + ").");
         return 0;
     }
 
