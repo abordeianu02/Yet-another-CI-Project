@@ -1,0 +1,45 @@
+#!/bin/sh
+# pre-push: on release branches, the pom.xml version must be greater than the
+# version at the remote tip. Branch globs live in .githooks/release-branches.
+# Bypass (deliberately): git push --no-verify
+set -f
+remote="$1"
+root=$(git rev-parse --show-toplevel) || exit 1
+cfg="$root/.githooks/release-branches"
+[ -f "$cfg" ] || exit 0
+
+find_java() {
+  if [ -n "$JAVA_HOME" ]; then
+    for j in "$JAVA_HOME/bin/java" "$JAVA_HOME/bin/java.exe"; do
+      [ -f "$j" ] && { echo "$j"; return 0; }
+    done
+  fi
+  command -v java 2>/dev/null
+}
+
+patterns=$(tr -d '\r' < "$cfg" | sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -v '^$')
+java_cmd=""
+status=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac
+  case "$local_sha" in *[!0]*) ;; *) continue ;; esac   # all zeros = branch deletion
+  branch=${remote_ref#refs/heads/}
+
+  matched=0
+  for p in $patterns; do
+    case "$branch" in $p) matched=1; break ;; esac
+  done
+  [ "$matched" = 1 ] || continue
+
+  if [ -z "$java_cmd" ]; then
+    java_cmd=$(find_java) || {
+      echo "pre-push: java not found (not on PATH, JAVA_HOME unset). Push blocked." >&2
+      exit 1
+    }
+  fi
+  # </dev/null: java must not swallow the ref lines still waiting on our stdin
+  "$java_cmd" "$root/.githooks/VersionCheck.java" check "$local_sha" "$remote_sha" "$branch" "$remote" </dev/null || status=1
+done
+
+exit $status

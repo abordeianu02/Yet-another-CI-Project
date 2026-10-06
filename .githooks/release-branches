@@ -1,0 +1,3 @@
+# One branch glob per line. Pushes to matching branches require a version bump.
+master
+release/*
