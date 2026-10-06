@@ -198,7 +198,7 @@ public class VersionCheck {
         String xml = Files.readString(pom, StandardCharsets.ISO_8859_1);
         Files.writeString(pom, replaceProjectVersion(xml, cur.toString(), chosen.toString()), StandardCharsets.ISO_8859_1);
 
-        Result c = run(null, true, "commit", "--only", "-m", "Bump version to " + chosen, "--", "pom.xml");
+        Result c = run(null, true, "commit", "--only", "-m", "build: release " + chosen, "--", "pom.xml");
         if (c.code() != 0) throw new Block("bump-version: git commit failed:\n" + c.out());
         Result t = run(null, true, "tag", "-a", tag, "-m", "Release " + tag);
         if (t.code() != 0) throw new Block("bump-version: commit done, but tagging failed:\n" + t.out());
