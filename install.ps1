@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Installs the pom.xml version pre-push hook into the current Git repository.
+  Installs the Version Guard hooks into the current Git repository.
 
 .PARAMETER Version
   Release tag to install. Default: the latest GitHub release.
@@ -13,7 +13,8 @@
 
 .PARAMETER Force
   Install even if existing hooks would stop running. Also overwrites a foreign
-  .githooks\pre-push and replaces a different repository-level core.hooksPath.
+  .githooks\pre-push or .githooks\commit-msg and replaces a different
+  repository-level core.hooksPath.
 
 .PARAMETER Uninstall
   Remove the hook files and unset core.hooksPath.
@@ -29,7 +30,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Repo  = 'abordeianu02/Yet-another-CI-Project'
-$Files = @('pre-push', 'VersionCheck.java', 'bump-version.cmd', 'setup-hooks.cmd')
+$Files = @('pre-push', 'commit-msg', 'VersionCheck.java', 'bump-version.cmd', 'setup-hooks.cmd')
 $Branches = @($Branches | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
 function Write-Text([string]$Path, [string]$Text, [switch]$Lf) {
@@ -64,6 +65,11 @@ if ($localPath -and $localPath -ne '.githooks' -and -not $Force) {
 $existing = Join-Path $hooks 'pre-push'
 if ((Test-Path $existing) -and -not $Force -and -not (Select-String -Path $existing -Pattern 'VersionCheck.java' -Quiet)) {
     throw '.githooks\pre-push exists and is not this hook. Re-run with -Force to overwrite it.'
+}
+$existingCommitMsg = Join-Path $hooks 'commit-msg'
+if ((Test-Path $existingCommitMsg) -and -not $Force -and
+    -not (Select-String -Path $existingCommitMsg -Pattern 'Standalone Conventional Commits 1\.0\.0 validation' -Quiet)) {
+    throw '.githooks\commit-msg exists and is not this hook. Re-run with -Force to overwrite it.'
 }
 
 # --- existing hooks that would stop running ----------------------------------
@@ -125,13 +131,19 @@ try {
     if (-not (Test-Path (Join-Path $srcHooks 'pre-push'))) {
         throw 'The package contains no .githooks\pre-push. Wrong tag?'
     }
+    $missingFiles = @($Files | Where-Object { -not (Test-Path (Join-Path $srcHooks $_)) })
+    if ($missingFiles.Count -gt 0) {
+        throw "The package is missing required file(s): $($missingFiles -join ', ')."
+    }
 
     # --- install files -------------------------------------------------------
     New-Item -ItemType Directory -Force -Path $hooks | Out-Null
     foreach ($f in $Files) { Copy-Item (Join-Path $srcHooks $f) (Join-Path $hooks $f) -Force }
 
-    # The shell hook must have LF endings, whatever the package was built with.
+    # Shell hooks must have LF endings, whatever the package was built with.
     Write-Text $existing (Get-Content $existing -Raw) -Lf
+    $commitMsg = Join-Path $hooks 'commit-msg'
+    Write-Text $commitMsg (Get-Content $commitMsg -Raw) -Lf
 
     $rb = Join-Path $hooks 'release-branches'
     if (-not (Test-Path $rb)) {
@@ -145,7 +157,7 @@ finally {
 
 # --- .gitattributes: keep line endings right on Windows ----------------------
 $ga    = Join-Path $root '.gitattributes'
-$rules = @('.githooks/pre-push text eol=lf', '.githooks/release-branches text eol=lf', '.githooks/*.cmd text eol=crlf')
+$rules = @('.githooks/pre-push text eol=lf', '.githooks/commit-msg text eol=lf', '.githooks/release-branches text eol=lf', '.githooks/*.cmd text eol=crlf')
 $gaText = ''
 if (Test-Path $ga) { $gaText = [IO.File]::ReadAllText($ga) }
 $missing = @($rules | Where-Object { $gaText -notmatch [regex]::Escape($_) })
@@ -158,6 +170,7 @@ if ($missing.Count -gt 0) {
 # --- git setup ---------------------------------------------------------------
 & git add -- .githooks .gitattributes
 & git update-index --chmod=+x .githooks/pre-push
+& git update-index --chmod=+x .githooks/commit-msg
 & git config --local core.hooksPath .githooks
 & git config --local push.followTags true
 

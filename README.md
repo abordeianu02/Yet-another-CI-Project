@@ -1,6 +1,6 @@
 # Version Guard
 
-A small Git pre-push hook for Maven projects. Before you push to a release branch such as `master`, it checks that the version in `pom.xml` has gone **up**, so the same version is never published twice.
+A small set of Git hooks for Maven projects. Before you push to a release branch such as `master`, the pre-push hook checks that the version in `pom.xml` has gone **up**, so the same version is never published twice. The installer also adds a `commit-msg` hook that validates commit messages against Conventional Commits.
 
 ```
 pre-push: push to 'master' blocked.
@@ -23,6 +23,7 @@ The installer checks first. If it finds existing hooks, it lists them, changes n
 
 - **No existing hooks:** the install just works.
 - **Other hooks (for example `pre-commit`):** install with `-Force`, then copy those files from the old folder into `.githooks/` and commit them together with the install. Hooks that look for helper files next to themselves may need adjusting.
+- **An existing `commit-msg` hook:** the installer adds its Conventional Commits validator at `.githooks/commit-msg`. Back up or combine your own hook before installing; `-Force` permits replacing a different hook at that path.
 - **You already have a `pre-push` hook:** Version Guard cannot share it. Do not merge them by appending text. Combine them yourself or do not install.
 - **Install anyway:** re-run with `-Force`. Your old hook files are not touched, they just stop running in this repository.
 
@@ -46,7 +47,7 @@ iwr https://raw.githubusercontent.com/abordeianu02/Yet-another-CI-Project/master
 powershell -ExecutionPolicy Bypass -File $env:TEMP\install-versionguard.ps1
 ```
 
-The installer copies the hook into `.githooks/`, sets up Git, and stages the files. Review them with `git status`, then commit and push.
+The installer copies both hooks and their supporting files into `.githooks/`, sets up Git, and stages the files. The `commit-msg` hook checks the Conventional Commits header and relevant body/footer formatting. Review the staged files with `git status`, then commit and push.
 
 Options (append to the second command, aka `powershell -ExecutionPolicy Bypass -File $env:TEMP\install-versionguard.ps1`):
 
@@ -54,7 +55,7 @@ Options (append to the second command, aka `powershell -ExecutionPolicy Bypass -
 |---|---|
 | `-Version 1.2.0` | Install a specific release instead of the latest |
 | `-Branches 'master,release/*'` | Branches to protect (only used on first install) |
-| `-Force` | Overwrite an existing, different `pre-push` hook or `core.hooksPath` |
+| `-Force` | Overwrite existing, different `pre-push` or `commit-msg` hooks or `core.hooksPath` |
 | `-Uninstall` | Remove the hook and unset `core.hooksPath` |
 
 ## Important!
@@ -100,13 +101,14 @@ What you give up: nothing else checks versions on the client. If your artifact r
 
 | File | Role |
 |---|---|
-| `install.ps1` | Installer. Downloads a release, copies the files below into `.githooks/`, adds `.gitattributes` rules, sets the executable bit, `core.hooksPath` and `push.followTags`. Never commits. |
+| `install.ps1` | Installer. Downloads a release, copies the files below into `.githooks/`, adds `.gitattributes` rules, sets the executable bits, `core.hooksPath` and `push.followTags`. Never commits. |
 | `.githooks/pre-push` | POSIX shell hook. Reads the pushed refs, matches branches against `release-branches`, finds Java, and calls `VersionCheck.java` per matching branch. Ignores deletions and tags. |
+| `.githooks/commit-msg` | POSIX shell hook. Validates commit message headers, blank-line separation, and breaking-change footers against Conventional Commits 1.0.0. |
 | `.githooks/VersionCheck.java` | All logic, as a single-file Java program (`java VersionCheck.java ...`). Mode `check` validates a push, mode `bump` runs the interactive bump. |
 | `.githooks/release-branches` | Branch patterns to protect. Blank lines and `#` comments allowed. |
 | `.githooks/bump-version.cmd` | Windows wrapper for `VersionCheck.java bump`. |
 | `.githooks/setup-hooks.cmd` | Per-clone setup: `core.hooksPath` and `push.followTags`. |
-| `.gitattributes` | Keeps `pre-push` on LF line endings (CRLF would break the shell script). |
+| `.gitattributes` | Keeps both shell hooks on LF line endings (CRLF would break the scripts). |
 
 **How the check works**
 

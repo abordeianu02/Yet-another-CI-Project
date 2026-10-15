@@ -1,0 +1,143 @@
+#!/bin/sh
+# commit-msg — Validate or normalize the commit message.
+# When: On `git commit`, after the message is composed, before the commit is finalized.
+# Args: $1 = path to the commit-message file.
+# Exit: Non-zero aborts the commit.
+# Standalone Conventional Commits 1.0.0 validation; POSIX shell built-ins only.
+# https://www.conventionalcommits.org/en/v1.0.0/
+
+reject() {
+    printf '\nCommit message rejected: %s\n\n' "$1" >&2
+    printf '%s\n' \
+        'Expected: <type>[(<scope>)][!]: <description>' \
+        '' \
+        'Types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test' \
+        '' \
+        'Separate the header from any body or footers with a blank line.' \
+        'Examples:' \
+        '' \
+        '  feat(auth): add login endpoint' \
+        '  fix: handle null response' \
+        '' \
+        'For breaking changes, add a ! to the header or add a footer ' \
+        'after a blank line with BREAKING CHANGE: in it. Examples: ' \
+        '' \
+        '  feat(api)!: remove the legacy endpoint' \
+        '' \
+        'OR' \
+        '' \
+        '  feat(api): remove the legacy endpoint' \
+        '' \
+        '  BREAKING CHANGE: clients must use the replacement endpoint' >&2
+    exit 1
+}
+
+if [ "$#" -ne 1 ] || [ ! -f "$1" ] || [ ! -r "$1" ]; then
+    reject 'provide one readable commit message file.'
+fi
+
+validate_header() {
+    # Keep Git-generated merge, revert and autosquash subjects usable in IDEs.
+    case "$1" in
+        "Merge branch '"?*"'"|"Merge branch '"?*"' into "?*|\
+        "Merge branches '"?*"'"|"Merge branches '"?*"' into "?*|\
+        "Merge remote-tracking branch '"?*"'"|"Merge remote-tracking branch '"?*"' into "?*|\
+        "Merge remote-tracking branches '"?*"'"|"Merge remote-tracking branches '"?*"' into "?*|\
+        "Merge tag '"?*"'"|"Merge tag '"?*"' into "?*|\
+        "Merge commit '"?*"'"|"Merge commit '"?*"' into "?*|\
+        "Revert \""?*"\"")
+            return
+            ;;
+        "Merge pull request #"*)
+            pull_request=${1#"Merge pull request #"}
+            number=${pull_request%% *}
+            case "$number" in
+                ''|*[!0-9]*) ;;
+                *)
+                    case "${pull_request#"$number"}" in
+                        " from "?*) return ;;
+                    esac
+                    ;;
+            esac
+            ;;
+        "fixup! "*|"squash! "*|"amend! "*)
+            case "${1#*! }" in
+                *[![:space:]]*) return ;;
+            esac
+            ;;
+    esac
+
+    type=${1%%[(:!]*}
+    # The specification treats types and scopes as case-insensitive.
+    case "$type" in
+        [bB][uU][iI][lL][dD]|[cC][hH][oO][rR][eE]|[cC][iI]|\
+        [dD][oO][cC][sS]|[fF][eE][aA][tT]|[fF][iI][xX]|\
+        [pP][eE][rR][fF]|[rR][eE][fF][aA][cC][tT][oO][rR]|\
+        [rR][eE][vV][eE][rR][tT]|[sS][tT][yY][lL][eE]|[tT][eE][sS][tT]) ;;
+        *) reject 'missing or unsupported commit type.' ;;
+    esac
+
+    remainder=${1#"$type"}
+    case "$remainder" in
+        \(*)
+            scope=${remainder#\(}
+            scope=${scope%%)*}
+            case "$scope" in
+                *\(*) reject 'scope must not contain nested parentheses.' ;;
+                *[![:space:]]*) ;;
+                *) reject 'scope must not be empty.' ;;
+            esac
+            case "$remainder" in
+                *\)*) remainder=${remainder#*)} ;;
+                *) reject 'scope must be enclosed in parentheses.' ;;
+            esac
+            ;;
+    esac
+    remainder=${remainder#\!}
+    case "$remainder" in
+        ": "*) ;;
+        *) reject 'type/scope must be followed by an optional ! and then colon-space.' ;;
+    esac
+    case "${remainder#": "}" in
+        *[![:space:]]*) ;;
+        *) reject 'description must not be empty.' ;;
+    esac
+}
+
+line_number=0
+previous_line_blank=0
+cr=$(printf '\r')
+while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%"$cr"}
+    # Ignore Git's default editor comments and its scissors/diff section.
+    case "$line" in
+        '# ------------------------ >8 ------------------------') break ;;
+        \#*) continue ;;
+    esac
+    line_number=$((line_number + 1))
+    case "$line_number" in
+        1) validate_header "$line" ;;
+        2)
+            case "$line" in
+                *[![:space:]]*) reject 'a blank line is required after the header.' ;;
+            esac
+            ;;
+    esac
+    case "$line" in
+        "BREAKING CHANGE:"*|"BREAKING-CHANGE:"*)
+            [ "$previous_line_blank" -eq 1 ] ||
+                reject 'breaking-change footer must be preceded by a blank line.'
+            case "${line#*:}" in
+                " "*[![:space:]]*) ;;
+                *) reject 'a breaking-change footer requires colon-space and a description.' ;;
+            esac
+            ;;
+    esac
+    case "$line" in
+            *[![:space:]]*) previous_line_blank=0 ;;
+            *) previous_line_blank=1 ;;
+    esac
+done < "$1"
+
+[ "$line_number" -gt 0 ] || reject 'commit message is empty.'
+exit 0
