@@ -40,6 +40,7 @@ validate_header() {
     # Keep Git-generated merge, revert and autosquash subjects usable in IDEs.
     case "$1" in
         "Merge branch '"?*"'"|"Merge branch '"?*"' into "?*|\
+        "Merge branch '"?*"' of "?*" into "?*|\
         "Merge branches '"?*"'"|"Merge branches '"?*"' into "?*|\
         "Merge remote-tracking branch '"?*"'"|"Merge remote-tracking branch '"?*"' into "?*|\
         "Merge remote-tracking branches '"?*"'"|"Merge remote-tracking branches '"?*"' into "?*|\
